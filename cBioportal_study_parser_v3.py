@@ -171,8 +171,7 @@ def main():
         os.mkdir(os.path.join(args['wd'], args['n']))
         
     print("Parsing to cBioPortal study structure if possible...")
-    Found_patient_columns = [col for col in patient_columns if col in df.columns]
-    Found_sample_columns = [col for col in sample_columns if col in df.columns]
+   
 
     df = read_input_file(args['f'])
     df = clean_dataframe(df)
@@ -185,6 +184,9 @@ def main():
     print(df.head())
     
     df.to_excel("output.xlsx", index=False)
+    
+    Found_patient_columns = [col for col in patient_columns if col in df.columns]
+    Found_sample_columns = [col for col in sample_columns if col in df.columns]
     
     # Writing data_clinical_patient.txt and data_clinical_sample.txt with meta_clinical_patient.txt and meta_clinical_sample.txt
     if Found_sample_columns:
