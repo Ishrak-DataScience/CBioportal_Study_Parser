@@ -4,7 +4,7 @@ import os
 from os.path import exists
 
 def parse_arguments():
-    f = input("Enter the Clinical data Excel file path : ") 
+    f = input("Enter the Clinical data Excel or csv file path : ") 
     n = input("Enter the name of the study:  ") 
     ct = input("Enter the cancer type (or 'coadread' if not provided): ")  or 'coadread'
     csi = input("Enter the cancer study identifier (or 'name of the study' if not provided) : ") or n
@@ -79,9 +79,11 @@ def prepare_meta_study(args):
     with open(f"{os.path.join(args['wd'], args['n'])}/meta_study.txt", 'w') as f:
         f.writelines(meta_study_content)
         
-def prepare_patient_data(df, patient_columns, sample_columns, args):
-    print(f"Found patient columns: {patient_columns}")
-    print(f"Found sample columns: {sample_columns}")
+        
+        
+def prepare_patient_data(df, patient_columns, args):
+    print(f"writing meta for clinica patient columns: {patient_columns}")
+  
 
     meta_clinical_patient_content = [
         f"cancer_study_identifier: {args['csi']}\n",
@@ -89,7 +91,7 @@ def prepare_patient_data(df, patient_columns, sample_columns, args):
         f"datatype: PATIENT_ATTRIBUTES\n",
         "data_filename: data_clinical_patient.txt"
     ]
-    with open(f"{os.path.join(args.wd, args.n)}/meta_clinical_patient.txt", 'w') as f:
+    with open(f"{os.path.join(args['wd'], args['n'])}/meta_clinical_patient.txt", 'w') as f:
         f.writelines(meta_clinical_patient_content)
 
     p_df = df.filter(patient_columns, axis=1)
@@ -107,19 +109,27 @@ def prepare_patient_data(df, patient_columns, sample_columns, args):
     p_df.drop_duplicates(inplace=True)
     return p_df
 
-def prepare_sample_data(df, patient_columns, args):
-    print("Removing patient-specific columns from sample data...")
-    sample_df = df.drop(columns=[col for col in patient_columns if col != 'PATIENT_ID'], errors='ignore')
+
+
+def prepare_sample_data(df, sample_columns, args):
+    #print("Removing patient-specific columns from sample data...")
+    print(f"writing meta for clinical sample columns: {sample_columns}")
+    s_df = df.filter(sample_columns, axis=1)
+    
 
     meta_clinical_sample_content = [
-        f"cancer_study_identifier: {args.csi}\n",
-        f"genetic_alteration_type: {args.gat}\n",
+        f"cancer_study_identifier: {args['csi']}\n",
+        f"genetic_alteration_type: {args['gat']}\n",
         f"datatype: SAMPLE_ATTRIBUTES\n",
         "data_filename: data_clinical_sample.txt"
     ]
-    with open(f"{os.path.join(args.wd, args.n)}/meta_clinical_sample.txt", 'w') as f:
+    with open(f"{os.path.join(args['wd'], args['n'])}/meta_clinical_sample.txt", 'w') as f:
         f.writelines(meta_clinical_sample_content)
-    return sample_df
+    s_df.drop_duplicates(inplace=True)
+    return s_df
+
+
+
 def write_clini_data(df, f_name, work_dir, study_name):
     print(f"Writing columns for {f_name}: {list(df.columns)}")  # Log the column names
     df_cols = "\t".join(list(df.columns))
@@ -160,45 +170,96 @@ def write_clini_data(df, f_name, work_dir, study_name):
     with open(f"{os.path.join(work_dir, study_name)}/{f_name}", "w") as f:
         f.writelines(sample_header)
         f.write(df)
+        
+        
+        
 def main():
     args = parse_arguments()
     print(f"args:   {args}")  
-    sample_columns = ['PATIENT_ID', 'SAMPLE_ID', 'CANCER_TYPE', 'CANCER_TYPE_DETAILED', 'TUMOR_TISSUE_SITE', 'SAMPLE_DISPLAY_NAME', 'SAMPLE_CLASS', 'METASTATIC_SITE', 'OTHER_SAMPLE_ID','BRAF','KRAS','MLH_1', 'PMS_2', 'MSH_2', 'MSH_6','isMSIH','x_TCD_tumour1_', 'x_TCD_tumour2_',]
-    patient_columns = ['PATIENT_ID', 'AGE', 'SEX', 'DFS_MONTHS', 'OS_MONTHS', 'OS_STATUS', 'DFS_STATUS', 'TUMOR_SITE']
-    gene_collums =['SAMPLE_ID','BRAF','KRAS']  
+    
+    patient_columns = ['PATIENT_ID', 'AGE', 'SEX', 'DFS_MONTHS', 'OS_MONTHS', 'OS_STATUS', 'DFS_STATUS', 'TUMOR_SITE','study','compassid','pooledcompassid']
+    Irrelevent_columns = ['Relative_Path_1','Relative_Path_2']
+
 
     if not exists(os.path.join(args['wd'], args['n'])):
         os.mkdir(os.path.join(args['wd'], args['n']))
         
-    print("Parsing to cBioPortal study structure if possible...")
+    
    
 
     df = read_input_file(args['f'])
+    print("name of the features/ collumns in the input file:")
+    print(df.columns)  
     df = clean_dataframe(df)
     df = rename_columns(df)
     prepare_meta_study(args)
     key_columns = ['PATIENT_ID', 'SAMPLE_ID']
     df = df.dropna(subset=key_columns, how='any')
     # For Prining and testing output and debugging
-    print("DataFrame after cleaning and renaming columns: check if that is waht you want")
+    print("DataFrame after cleaning and renaming columns: check if that is what you want you want")
     print(df.head())
     
     df.to_excel("output.xlsx", index=False)
     
-    Found_patient_columns = [col for col in patient_columns if col in df.columns]
-    Found_sample_columns = [col for col in sample_columns if col in df.columns]
+    print("Parsing to cBioPortal study structure if possible...")
+    # Taking question from the user if there are any irrellevant columns in the data
+    Modify_irrelevent_columns = input("do you want to specify irrelevent columns. Press y for yes and n for no(tool will search predefined irrelevent collumns features in the data) :  ")
+    if Modify_irrelevent_columns == 'y':
+        Irrelevent_columns = input("Enter the patient columns separated by commas: ").split(",")
+        Irrelevent_columns = [col.strip() for col in Irrelevent_columns]
+        print(f"Found irrelevent columns: {Irrelevent_columns}")
+    else:
+        print("Using default irrelerent columns.") 
     
-    # Writing data_clinical_patient.txt and data_clinical_sample.txt with meta_clinical_patient.txt and meta_clinical_sample.txt
-    if Found_sample_columns:
-        s_df = prepare_sample_data(df, Found_patient_columns, args)
-        write_clini_data(s_df, "data_clinical_sample.txt", args['wd'], args['n'])
-    if not Found_sample_columns:
-        print("No patient columns found in the input file. It is required to have it.")
-        return 0
-    if Found_patient_columns:
-        p_df = prepare_patient_data(df, Found_patient_columns, Found_sample_columns, args)
+    
+    # Check if the user what to modify the patient columns or not
+    Modify = input("do you want to specify patient_collumns. Press y for yes and n for no(tool will search predefined features in the data) :  ")
+    if Modify == 'y':
+        patient_columns = input("Enter the patient columns separated by commas: ").split(",")
+        
+        patient_columns = [col.strip() for col in patient_columns]
+    else:
+        print("Using default patient columns.") 
+    Found_patient_columns = [col for col in patient_columns if col in df.columns]
+    
+   # Check if the user what to modify the sample columns or not
+    Found_sample_columns = []
+    Modify2 = input("do you want to specify sample_collumns. If Press y, the tool will look for the collums you define in the input file. If Press n, the tool will take all the collumns in found sample collumn without the patient collumns(This usually is most of the case) :  ")
+    if Modify2 == 'y':
+        sample_columns = input("Enter the patient columns separated by commas: ").split(",")
+        sample_columns = [col.strip() for col in patient_columns]
+        Found_sample_columns = [col for col in sample_columns if col in df.columns]
+    if Modify2 == 'n':
+        Found_sample_columns = [col for col in df.columns 
+                        if col not in Found_patient_columns 
+                        and col not in Irrelevent_columns  # Exclude irrelevant columns
+                        or col == 'PATIENT_ID']# Keep the PATIENT_ID column
+    
+    
+    
+    ## Check patients collumn only consist of PATIENT_ID 
+    ## if all the minimum required columns are not found in the input file
+    if len(Found_patient_columns) == 1 and Found_patient_columns[0] == 'PATIENT_ID':
+        print(f'Found patient columns length: {len(Found_patient_columns)}')
+        print("Only PATIENT_ID column found in the input file. No patient-specific columns to process.")
+        
+      
+    
+    if  len(Found_patient_columns) > 1:
+        print(f"Found patient columns: {Found_patient_columns}")
+        p_df = prepare_patient_data(df, Found_patient_columns, args)
         write_clini_data(p_df, "data_clinical_patient.txt", args['wd'], args['n'])
-
+        
+    if len(Found_sample_columns) > 1:
+        print(f"Found sample columns: {Found_sample_columns}")
+        s_df = prepare_sample_data(df, Found_sample_columns, args)
+        write_clini_data(s_df, "data_clinical_sample.txt", args['wd'], args['n'])
+       
+        
+    if not Found_sample_columns:
+        print("No Sample columns found in the input file. It is required to have it.")
+        return 0
+    
    
 
 
