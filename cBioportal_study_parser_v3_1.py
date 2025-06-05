@@ -115,25 +115,98 @@ def clean_dataframe(df):
     df = df.dropna(axis=1, how='all')  
     return df
 
+def handle_duplicate_columns(df):
+    """
+    Handles duplicate columns by asking user which ones to keep.
+    Returns dataframe with unique column names.
+    """
+    while True:
+        # Find duplicate columns
+        duplicates = df.columns[df.columns.duplicated()].unique()
+        
+        if len(duplicates) == 0:
+            return df
+            
+        print("\nWARNING: Found duplicate column names in the data:")
+        for dup in duplicates:
+            print(f"\nDuplicate name: '{dup}' appears at positions:")
+            # Find all indices where this duplicate appears
+            indices = [i for i, col in enumerate(df.columns) if col == dup]
+            for i in indices:
+                # Show sample data from each duplicate column
+                sample_data = df.iloc[:5, i].to_string(index=False)
+                print(f"  Column {i}: {sample_data}")
+        
+        print("\nHow would you like to proceed?")
+        print("1. Keep first occurrence and drop others")
+        print("2. Let me choose which columns to keep")
+        print("3. Abort processing")
+        
+        choice = input("Enter your choice (1-3): ").strip()
+        
+        if choice == '1':
+            # Keep first occurrence automatically
+            df = df.loc[:, ~df.columns.duplicated(keep='first')]
+            print("Kept first occurrence of each duplicate column.")
+            return df
+            
+        elif choice == '2':
+            # Let user choose which columns to keep
+            for dup in duplicates:
+                indices = [i for i, col in enumerate(df.columns) if col == dup]
+                print(f"\nFor duplicate column '{dup}':")
+                for i in indices:
+                    print(f"  {i}: First 5 values - {df.iloc[:5, i].values}")
+                
+                while True:
+                    try:
+                        keep = int(input(f"Enter index (0-{len(df.columns)-1}) to KEEP for '{dup}': "))
+                        if keep not in indices:
+                            print("Error: Must choose one of the duplicate column indices")
+                            continue
+                            
+                        # Drop all other duplicates of this column
+                        drop_cols = [i for i in indices if i != keep]
+                        df.drop(df.columns[drop_cols], axis=1, inplace=True)
+                        break
+                    except ValueError:
+                        print("Please enter a valid number")
+            
+            return df
+            
+        elif choice == '3':
+            exit(0)
+        else:
+            print("Invalid choice, please try again")
+
 def rename_columns(df):
-    if 'PATIENT' in df.columns:
-        df.rename(columns={'PATIENT': 'PATIENT_ID'}, inplace=True)
-    if 'DSE_E' in df.columns:
-        df.rename(columns={'DSE_E': 'DFS_STATUS'}, inplace=True)
-    if 'DFS_months' in df.columns:
-        df.rename(columns={'DFS_months': 'DFS_MONTHS'}, inplace=True)
-    if 'death_event' in df.columns:
-        df.rename(columns={'death_event': 'OS_STATUS'}, inplace=True)
-    if 'GENDER' in df.columns:
-        df.rename(columns={'GENDER': 'SEX'}, inplace=True)
-    if 'DFS_STATUS_' in df.columns:
-        df.rename(columns={'DFS_STATUS_': 'DFS_STATUS'}, inplace=True)
+    """Modified rename_columns with duplicate handling"""
+    # Convert all column names to uppercase first
+    df.columns = df.columns.str.upper()
+    
+    rename_map = {
+        'PATIENT': 'PATIENT_ID',
+        'DSE_E': 'DFS_STATUS',
+        'DFS_months': 'DFS_MONTHS',
+        'death_event': 'OS_STATUS',
+        'GENDER': 'SEX'
+    }
+    
+    # Apply renames carefully
+    for old_name, new_name in rename_map.items():
+        if old_name in df.columns:
+            if new_name in df.columns:
+                print(f"Warning: Cannot rename {old_name} to {new_name} - target name already exists")
+            else:
+                df.rename(columns={old_name: new_name}, inplace=True)
+    
     if 'SAMPLE_ID' not in df.columns:
         df['SAMPLE_ID'] = df['PATIENT_ID']
-    #df['PATIENT_ID'] = df['PATIENT_ID'].replace(' ', '_', regex=True)
-    #if 'SAMPLE_ID' in df.columns:
-       # df['SAMPLE_ID'] = df['SAMPLE_ID'].replace(' ', '_', regex=True)
+    
+    # Handle any duplicates that may have been created
+    df = handle_duplicate_columns(df)
     return df
+
 def prepare_meta_study(args):
     meta_study_content = [
         f"type_of_cancer: {args['ct']}\n",
